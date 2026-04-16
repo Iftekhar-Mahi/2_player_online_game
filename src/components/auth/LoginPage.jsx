@@ -9,23 +9,23 @@ export default function LoginPage() {
   };
   
   return (
-    <div className="flex flex-col items-center justify-center p-8 bg-gray-800 rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold mb-4">Select Player</h2>
-      <p className="text-gray-400 mb-6 text-center max-w-sm">
+    <div className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-800 p-5 shadow-xl sm:p-8">
+      <h2 className="mb-3 text-center text-2xl font-bold sm:text-3xl">Select Player</h2>
+      <p className="mx-auto mb-6 max-w-sm text-center text-sm text-gray-400 sm:text-base">
         For prototyping, select your identity to connect to the game system.
       </p>
       
       <div className="flex flex-col gap-4 w-full">
         <button 
           onClick={() => handleLogin('player1')}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold transition"
+          className="rounded-xl bg-blue-600 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99]"
         >
           Login as Player 1
         </button>
 
         <button 
           onClick={() => handleLogin('player2')}
-          className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold transition"
+          className="rounded-xl bg-green-600 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-green-700 active:scale-[0.99]"
         >
           Login as Player 2
         </button>

@@ -14,6 +14,27 @@ body {
   color: #f3f4f6;
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.safe-bottom {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
 @keyframes chipDrop {
   0% {
     transform: translateY(-400%);

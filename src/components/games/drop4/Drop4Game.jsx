@@ -23,15 +23,15 @@ export default function Drop4Game() {
 
   if (room.status === 'waiting') {
     return (
-      <div className="flex flex-col items-center justify-center bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 text-center">
+      <div className="flex w-full max-w-md flex-col items-center justify-center rounded-3xl border border-gray-700 bg-gray-800 p-5 text-center shadow-2xl sm:p-8">
         <div className="animate-pulse mb-2">
           <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto opacity-80">
             <div className="w-12 h-12 bg-gray-800 rounded-full" />
           </div>
         </div>
-        <h2 className="text-3xl font-bold mb-4 text-white">Waiting for opponent...</h2>
-        <p className="text-gray-400 mb-6">Share this code with your friend to connect</p>
-        <div className="text-6xl font-mono bg-black/50 px-8 py-5 rounded-lg tracking-[0.25em] text-blue-400 shadow-inner border border-gray-900">
+        <h2 className="mb-3 text-2xl font-bold text-white sm:mb-4 sm:text-3xl">Waiting for opponent...</h2>
+        <p className="mb-5 text-sm text-gray-400 sm:mb-6 sm:text-base">Share this code with your friend to connect</p>
+        <div className="w-full overflow-hidden rounded-2xl border border-gray-900 bg-black/50 px-4 py-4 font-mono text-4xl tracking-[0.2em] text-blue-400 shadow-inner sm:px-8 sm:py-5 sm:text-6xl sm:tracking-[0.25em]">
           {room.code}
         </div>
       </div>
@@ -140,18 +140,18 @@ export default function Drop4Game() {
   };
 
   return (
-    <div className="flex flex-col items-center space-y-8 w-full">
+    <div className="flex w-full flex-col items-center gap-5 sm:gap-8">
       {/* Player header / Status Bar */}
-      <div className="flex justify-between w-full max-w-3xl bg-gray-800 p-6 rounded-2xl items-center shadow-xl border border-gray-700">
+      <div className="flex w-full max-w-3xl items-center justify-between gap-3 rounded-2xl border border-gray-700 bg-gray-800 p-4 shadow-xl sm:p-6">
         {/* You */}
-        <div className={`flex flex-col items-center gap-2 transition-opacity ${isMyTurn ? 'opacity-100 scale-110' : 'opacity-50'}`}>
-          <span className="text-sm font-bold text-gray-400 capitalize">You</span>
-          <div className={`w-8 h-8 rounded-full shadow-lg ${playerColor} ${isMyTurn ? 'ring-4 ring-offset-2 ring-offset-gray-800 ring-white' : ''}`} /> 
+        <div className={`flex min-w-0 flex-col items-center gap-2 transition-opacity ${isMyTurn ? 'opacity-100 scale-110' : 'opacity-50'}`}>
+          <span className="text-xs font-bold text-gray-400 capitalize sm:text-sm">You</span>
+          <div className={`h-6 w-6 rounded-full shadow-lg sm:h-8 sm:w-8 ${playerColor} ${isMyTurn ? 'ring-4 ring-offset-2 ring-offset-gray-800 ring-white' : ''}`} /> 
         </div>
 
         {/* Center Status */}
-        <div className="text-center flex-grow">
-          <div className="text-3xl font-extrabold tracking-wide mb-1">
+        <div className="min-w-0 flex-grow text-center">
+          <div className="mb-1 text-lg font-extrabold tracking-wide sm:text-3xl">
             {gameState.winner_id || gameState.current_turn === null
               ? (!gameState.winner_id ? 'DRAW!' : (gameState.winner_id === user.id ? 'YOU WIN!' : 'OPPONENT WINS!'))
               : (isMyTurn ? <span className="text-green-400 animate-pulse">Your Turn</span> : <span className="text-gray-400">Opponent's Turn</span>)
@@ -160,7 +160,7 @@ export default function Drop4Game() {
           {(gameState.winner_id || gameState.current_turn === null) && (
             <button 
               onClick={handleRematch}
-              className="mt-2 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg transition-transform active:scale-95"
+              className="mt-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-lg transition-transform active:scale-95 sm:px-6 sm:text-base"
             >
               Play Again
             </button>
@@ -168,25 +168,26 @@ export default function Drop4Game() {
         </div>
 
         {/* Opponent */}
-        <div className={`flex flex-col items-center gap-2 transition-opacity ${!isMyTurn && !gameState.winner_id ? 'opacity-100 scale-110' : 'opacity-50'}`}>
-          <span className="text-sm font-bold text-gray-400 capitalize">Opponent</span>
-          <div className={`w-8 h-8 rounded-full shadow-lg ${opponentColor} ${!isMyTurn && !gameState.winner_id ? 'ring-4 ring-offset-2 ring-offset-gray-800 ring-white' : ''}`} /> 
+        <div className={`flex min-w-0 flex-col items-center gap-2 transition-opacity ${!isMyTurn && !gameState.winner_id ? 'opacity-100 scale-110' : 'opacity-50'}`}>
+          <span className="text-xs font-bold text-gray-400 capitalize sm:text-sm">Opponent</span>
+          <div className={`h-6 w-6 rounded-full shadow-lg sm:h-8 sm:w-8 ${opponentColor} ${!isMyTurn && !gameState.winner_id ? 'ring-4 ring-offset-2 ring-offset-gray-800 ring-white' : ''}`} /> 
         </div>
       </div>
 
       {/* Game Board */}
-      <div className="bg-blue-600 p-3 sm:p-5 rounded-2xl shadow-[0_20px_0_0_rgb(30,58,138)] border-t-4 border-blue-500 relative">
+      <div className="w-full max-w-3xl overflow-x-auto pb-2">
+        <div className="mx-auto w-max rounded-2xl border-t-4 border-blue-500 bg-blue-600 p-2 shadow-[0_14px_0_0_rgb(30,58,138)] relative sm:p-5 sm:shadow-[0_20px_0_0_rgb(30,58,138)]">
         {/* Invisible columns for hover effect */}
-        <div className="absolute inset-0 flex p-3 sm:p-5 z-0 pointer-events-none">
+        <div className="pointer-events-none absolute inset-0 z-0 flex p-2 sm:p-5">
           {Array(7).fill(null).map((_, i) => (
-             <div key={i} className={`flex-1 mx-1 sm:mx-2 rounded-xl transition-colors duration-200 ${isMyTurn && isValidMove(board, i) && !gameState.winner_id ? 'hover:bg-white/10' : ''}`} />
+             <div key={i} className={`mx-0.5 flex-1 rounded-xl transition-colors duration-200 sm:mx-2 ${isMyTurn && isValidMove(board, i) && !gameState.winner_id ? 'hover:bg-white/10' : ''}`} />
           ))}
         </div>
 
         {/* Actual grid */}
-        <div className="relative z-10 flex flex-col gap-2">
+        <div className="relative z-10 flex flex-col gap-1 sm:gap-2">
           {board.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex gap-2">
+            <div key={rowIndex} className="flex gap-1 sm:gap-2">
               {row.map((cell, colIndex) => {
                 const isP1 = cell === room.host_id;
                 const isP2 = cell === room.guest_id;
@@ -197,7 +198,7 @@ export default function Drop4Game() {
                     key={colIndex} 
                     onClick={() => handleColumnClick(colIndex)}
                     className={`
-                      relative w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden 
+                      relative h-10 w-10 overflow-hidden rounded-full sm:h-16 sm:w-16
                       ${isMyTurn && isValidMove(board, colIndex) ? 'cursor-pointer' : 'cursor-default'} 
                       outline-none focus:outline-none
                     `}
@@ -221,6 +222,7 @@ export default function Drop4Game() {
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

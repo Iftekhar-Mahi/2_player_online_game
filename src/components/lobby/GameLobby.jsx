@@ -84,15 +84,16 @@ export default function GameLobby() {
   };
 
   return (
-    <div className="w-full max-w-md bg-gray-800 p-8 rounded-lg shadow-xl text-center">
-      <h2 className="text-3xl font-bold mb-8">Game Lobby</h2>
+    <div className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-800 p-5 text-center shadow-xl sm:p-8">
+      <h2 className="mb-3 text-3xl font-bold sm:mb-8">Game Lobby</h2>
+      <p className="mb-6 text-sm text-gray-400 sm:hidden">Create a room or enter a code to join from your phone.</p>
       
       <div className="space-y-6">
         <div>
           <button 
             onClick={createRoom}
             disabled={loading}
-            className="w-full py-4 text-xl bg-blue-600 hover:bg-blue-500 rounded-md font-bold transition disabled:opacity-50"
+            className="w-full rounded-xl bg-blue-600 py-3.5 text-lg font-bold transition hover:bg-blue-500 disabled:opacity-50 sm:py-4 sm:text-xl"
           >
             Create New Game
           </button>
@@ -110,13 +111,16 @@ export default function GameLobby() {
             placeholder="Enter Room Code"
             value={joinCode}
             onChange={e => setJoinCode(e.target.value)}
-            className="w-full p-4 text-center text-xl bg-gray-900 border border-gray-700 rounded-md focus:outline-none focus:border-blue-500 uppercase tracking-widest"
+            className="w-full rounded-xl border border-gray-700 bg-gray-900 p-4 text-center text-lg uppercase tracking-[0.35em] focus:border-blue-500 focus:outline-none sm:text-xl"
             maxLength={6}
+            inputMode="text"
+            autoCapitalize="characters"
+            autoCorrect="off"
           />
           <button
             type="submit"
             disabled={loading || joinCode.length < 6}
-            className="w-full py-4 text-xl bg-gray-700 hover:bg-gray-600 rounded-md font-bold transition disabled:opacity-50"
+            className="w-full rounded-xl bg-gray-700 py-3.5 text-lg font-bold transition hover:bg-gray-600 disabled:opacity-50 sm:py-4 sm:text-xl"
           >
             Join Game
           </button>
