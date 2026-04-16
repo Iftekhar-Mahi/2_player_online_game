@@ -2,215 +2,125 @@ import { createContext, createElement, useContext, useEffect, useState } from 'r
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
+const SESSION_TOKEN_KEY = 'app_session_token';
 
 const normalizeUsername = (value) => value.trim().toLowerCase();
-
-const isValidUsername = (value) => /^[a-z0-9_]{3,24}$/.test(value);
-
-const mapAuthError = (error, normalizedUsername) => {
-  const message = error?.message?.toLowerCase() ?? '';
-
-  if (
-    message.includes('already registered') ||
-    message.includes('user already registered') ||
-    message.includes('duplicate key') ||
-    message.includes('already been registered')
-  ) {
-    return new Error(`The username "${normalizedUsername}" is already taken.`);
-  }
-
-  if (message.includes('invalid login credentials')) {
-    return new Error('Invalid email or password.');
-  }
-
-  if (message.includes('email not confirmed')) {
-    return new Error('Please verify your email before logging in.');
-  }
-
-  return error;
-};
-
-const buildFallbackUsername = (authUser) => {
-  const metadataName = normalizeUsername(authUser?.user_metadata?.username ?? '');
-
-  if (metadataName) {
-    return metadataName;
-  }
-
-  if (authUser?.email) {
-    return normalizeUsername(authUser.email.split('@')[0]);
-  }
-
-  return 'player';
-};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = async (authUser) => {
-    if (!authUser) {
+  const setAuthUser = (authRow) => {
+    if (!authRow) {
+      setUser(null);
       setProfile(null);
-      return null;
+      return;
     }
 
-    const { data: existingProfile, error: fetchError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .maybeSingle();
-
-    if (fetchError) {
-      throw fetchError;
-    }
-
-    if (existingProfile) {
-      setProfile(existingProfile);
-      return existingProfile;
-    }
-
-    const fallbackProfile = {
-      id: authUser.id,
-      email: authUser.email,
-      username: buildFallbackUsername(authUser)
+    const nextUser = {
+      id: authRow.user_id,
+      email: authRow.email,
+      username: authRow.username
     };
 
-    const { data: createdProfile, error: upsertError } = await supabase
-      .from('profiles')
-      .upsert(fallbackProfile, { onConflict: 'id' })
-      .select()
-      .single();
-
-    if (upsertError) {
-      throw upsertError;
-    }
-
-    setProfile(createdProfile);
-    return createdProfile;
+    setUser(nextUser);
+    setProfile(nextUser);
   };
 
   useEffect(() => {
     let isMounted = true;
 
-    const syncAuthState = async (session) => {
-      const authUser = session?.user ?? null;
+    const restoreSession = async () => {
+      const token = localStorage.getItem(SESSION_TOKEN_KEY);
 
-      if (!isMounted) {
+      if (!token) {
+        if (isMounted) setLoading(false);
         return;
       }
 
-      setUser(authUser);
+      const { data, error } = await supabase
+        .rpc('app_validate_session', { p_token: token })
+        .maybeSingle();
 
-      if (!authUser) {
-        setProfile(null);
+      if (!isMounted) return;
+
+      if (error || !data) {
+        localStorage.removeItem(SESSION_TOKEN_KEY);
+        setAuthUser(null);
         setLoading(false);
         return;
       }
 
-      setLoading(true);
-
-      try {
-        await loadProfile(authUser);
-      } catch (error) {
-        console.error('Failed to load profile:', error.message);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+      setAuthUser(data);
+      setLoading(false);
     };
 
-    supabase.auth.getSession().then(({ data }) => {
-      syncAuthState(data.session);
-    });
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      syncAuthState(session);
-    });
+    restoreSession();
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
   }, []);
 
   const signUp = async ({ email, username, password }) => {
     setLoading(true);
+
     const normalizedUsername = normalizeUsername(username);
 
-    if (!isValidUsername(normalizedUsername)) {
-      setLoading(false);
-      throw new Error('Username must be 3-24 characters and use only letters, numbers, or underscores.');
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username: normalizedUsername
-        }
-      }
+    const { error: registerError } = await supabase.rpc('app_register', {
+      p_email: email.trim().toLowerCase(),
+      p_username: normalizedUsername,
+      p_password: password
     });
 
-    if (error) {
+    if (registerError) {
       setLoading(false);
-      throw mapAuthError(error, normalizedUsername);
+      throw new Error(registerError.message);
     }
 
-    if (data.session?.user) {
-      setUser(data.session.user);
-      try {
-        await loadProfile(data.session.user);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      setLoading(false);
-    }
-
-    return data;
+    const loginData = await signIn({ email, password });
+    return { session: true, user: loginData.user };
   };
 
   const signIn = async ({ email, password }) => {
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    const { data, error } = await supabase
+      .rpc('app_login', {
+        p_email: email.trim().toLowerCase(),
+        p_password: password
+      })
+      .single();
 
-    if (error) {
+    if (error || !data) {
       setLoading(false);
-      throw mapAuthError(error, '');
+      throw new Error(error?.message || 'Invalid email or password.');
     }
 
-    setUser(data.user);
+    localStorage.setItem(SESSION_TOKEN_KEY, data.token);
+    setAuthUser(data);
+    setLoading(false);
 
-    try {
-      await loadProfile(data.user);
-    } finally {
-      setLoading(false);
-    }
-
-    return data;
+    return {
+      user: {
+        id: data.user_id,
+        email: data.email,
+        username: data.username
+      }
+    };
   };
 
   const signOut = async () => {
     setLoading(true);
+    const token = localStorage.getItem(SESSION_TOKEN_KEY);
 
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      setLoading(false);
-      throw error;
+    if (token) {
+      await supabase.rpc('app_logout', { p_token: token });
     }
 
-    setUser(null);
-    setProfile(null);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    setAuthUser(null);
     setLoading(false);
   };
 
