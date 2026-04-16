@@ -8,12 +8,15 @@ drop table if exists public.profiles cascade;
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
-  username text unique not null,
+  username text not null,
   avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint username_length check (char_length(username) between 3 and 24)
+  constraint username_length check (char_length(username) between 3 and 24),
+  constraint username_format check (username ~ '^[a-z0-9_]{3,24}$')
 );
+
+create unique index profiles_username_lower_idx on public.profiles (lower(username));
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -27,8 +30,8 @@ begin
     new.id,
     new.email,
     coalesce(
-      nullif(trim(new.raw_user_meta_data ->> 'username'), ''),
-      split_part(new.email, '@', 1)
+      nullif(lower(trim(new.raw_user_meta_data ->> 'username')), ''),
+      lower(split_part(new.email, '@', 1))
     )
   )
   on conflict (id) do update

@@ -11,6 +11,7 @@ export default function Drop4Game() {
   const { user } = useAuth();
   const { room, gameState, setGameState } = useGameStore();
   const { loading, error } = useRealtimeGame(roomId);
+  const [copyState, setCopyState] = useState('idle');
 
   const isHost = room?.host_id === user?.id;
   const playerColor = isHost ? 'bg-red-500' : 'bg-yellow-400';
@@ -20,6 +21,21 @@ export default function Drop4Game() {
   if (loading) return <div className="text-xl">Loading room state...</div>;
   if (error) return <div className="text-xl text-red-500">Error: {error}</div>;
   if (!room || !gameState) return <div className="text-xl">Room not found</div>;
+
+  const handleCopyCode = async () => {
+    if (!room?.code) return;
+
+    try {
+      await navigator.clipboard.writeText(room.code);
+      setCopyState('copied');
+    } catch (_error) {
+      setCopyState('failed');
+    }
+
+    window.setTimeout(() => {
+      setCopyState('idle');
+    }, 1800);
+  };
 
   if (room.status === 'waiting') {
     return (
@@ -31,8 +47,21 @@ export default function Drop4Game() {
         </div>
         <h2 className="mb-3 text-2xl font-bold text-white sm:mb-4 sm:text-3xl">Waiting for opponent...</h2>
         <p className="mb-5 text-sm text-gray-400 sm:mb-6 sm:text-base">Share this code with your friend to connect</p>
-        <div className="w-full overflow-hidden rounded-2xl border border-gray-900 bg-black/50 px-4 py-4 font-mono text-4xl tracking-[0.2em] text-blue-400 shadow-inner sm:px-8 sm:py-5 sm:text-6xl sm:tracking-[0.25em]">
-          {room.code}
+        <div className="w-full overflow-hidden rounded-2xl border border-gray-900 bg-black/50 px-4 py-4 shadow-inner sm:px-8 sm:py-5">
+          <div className="font-mono text-4xl tracking-[0.2em] text-blue-400 sm:text-6xl sm:tracking-[0.25em]">
+            {room.code}
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyCode}
+            className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 active:scale-[0.99] sm:mx-auto sm:w-auto sm:min-w-36"
+          >
+            {copyState === 'copied'
+              ? 'Copied!'
+              : copyState === 'failed'
+                ? 'Copy failed'
+                : 'Copy Code'}
+          </button>
         </div>
       </div>
     );

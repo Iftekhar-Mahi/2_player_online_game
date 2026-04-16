@@ -2,16 +2,42 @@ import { createContext, createElement, useContext, useEffect, useState } from 'r
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
+const USERNAME_EMAIL_DOMAIN = 'players.local';
+
+const normalizeUsername = (value) => value.trim().toLowerCase();
+
+const isValidUsername = (value) => /^[a-z0-9_]{3,24}$/.test(value);
+
+const usernameToAuthEmail = (username) => `${username}@${USERNAME_EMAIL_DOMAIN}`;
+
+const mapAuthError = (error, normalizedUsername) => {
+  const message = error?.message?.toLowerCase() ?? '';
+
+  if (
+    message.includes('already registered') ||
+    message.includes('user already registered') ||
+    message.includes('duplicate key') ||
+    message.includes('already been registered')
+  ) {
+    return new Error(`The username "${normalizedUsername}" is already taken.`);
+  }
+
+  if (message.includes('invalid login credentials')) {
+    return new Error('Invalid username or password.');
+  }
+
+  return error;
+};
 
 const buildFallbackUsername = (authUser) => {
-  const metadataName = authUser?.user_metadata?.username?.trim();
+  const metadataName = normalizeUsername(authUser?.user_metadata?.username ?? '');
 
   if (metadataName) {
     return metadataName;
   }
 
   if (authUser?.email) {
-    return authUser.email.split('@')[0];
+    return normalizeUsername(authUser.email.split('@')[0]);
   }
 
   return 'player';
@@ -110,22 +136,30 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const signUp = async ({ email, password, username }) => {
+  const signUp = async ({ username, password }) => {
     setLoading(true);
+    const normalizedUsername = normalizeUsername(username);
+
+    if (!isValidUsername(normalizedUsername)) {
+      setLoading(false);
+      throw new Error('Username must be 3-24 characters and use only letters, numbers, or underscores.');
+    }
+
+    const email = usernameToAuthEmail(normalizedUsername);
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          username
+          username: normalizedUsername
         }
       }
     });
 
     if (error) {
       setLoading(false);
-      throw error;
+      throw mapAuthError(error, normalizedUsername);
     }
 
     if (data.session?.user) {
@@ -142,8 +176,16 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signIn = async ({ email, password }) => {
+  const signIn = async ({ username, password }) => {
     setLoading(true);
+    const normalizedUsername = normalizeUsername(username);
+
+    if (!isValidUsername(normalizedUsername)) {
+      setLoading(false);
+      throw new Error('Enter the username you registered with.');
+    }
+
+    const email = usernameToAuthEmail(normalizedUsername);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -152,7 +194,7 @@ export function AuthProvider({ children }) {
 
     if (error) {
       setLoading(false);
-      throw error;
+      throw mapAuthError(error, normalizedUsername);
     }
 
     setUser(data.user);
@@ -190,7 +232,8 @@ export function AuthProvider({ children }) {
         loading,
         signIn,
         signUp,
-        signOut
+        signOut,
+        normalizeUsername
       }
     },
     children

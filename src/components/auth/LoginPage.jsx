@@ -3,11 +3,10 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function LoginPage() {
-  const { user, signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, loading, normalizeUsername } = useAuth();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     username: '',
-    email: '',
     password: ''
   });
   const [error, setError] = useState('');
@@ -38,15 +37,14 @@ export default function LoginPage() {
     try {
       if (isRegister) {
         await signUp({
-          username: form.username.trim(),
-          email: form.email.trim(),
+          username: form.username,
           password: form.password
         });
 
         setSuccess('Account created. You can now start playing.');
       } else {
         await signIn({
-          email: form.email.trim(),
+          username: form.username,
           password: form.password
         });
       }
@@ -62,8 +60,8 @@ export default function LoginPage() {
       </h2>
       <p className="mx-auto mb-6 max-w-sm text-center text-sm text-gray-400 sm:text-base">
         {isRegister
-          ? 'Register with email and password so players can log in from any device.'
-          : 'Log in with your email and password to rejoin your games.'}
+          ? 'Pick a unique username and password so players can log in from any device.'
+          : 'Log in with your username and password to rejoin your games.'}
       </p>
 
       <div className="mb-6 grid grid-cols-2 rounded-2xl bg-gray-900 p-1">
@@ -92,32 +90,21 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {isRegister && (
-          <label className="text-left">
-            <span className="mb-2 block text-sm font-medium text-gray-300">Username</span>
-            <input
-              type="text"
-              value={form.username}
-              onChange={(event) => updateField('username', event.target.value)}
-              className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
-              minLength={3}
-              maxLength={24}
-              required={isRegister}
-              placeholder="yourname"
-            />
-          </label>
-        )}
-
         <label className="text-left">
-          <span className="mb-2 block text-sm font-medium text-gray-300">Email</span>
+          <span className="mb-2 block text-sm font-medium text-gray-300">Username</span>
           <input
-            type="email"
-            value={form.email}
-            onChange={(event) => updateField('email', event.target.value)}
+            type="text"
+            value={form.username}
+            onChange={(event) => updateField('username', normalizeUsername(event.target.value))}
             className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
             required
-            placeholder="you@example.com"
-            autoComplete={isRegister ? 'email' : 'username'}
+            minLength={3}
+            maxLength={24}
+            pattern="[a-z0-9_]{3,24}"
+            placeholder="yourname"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="username"
           />
         </label>
 
@@ -134,6 +121,12 @@ export default function LoginPage() {
             autoComplete={isRegister ? 'new-password' : 'current-password'}
           />
         </label>
+
+        {isRegister && (
+          <p className="text-left text-xs text-gray-400">
+            Usernames must be unique and can use lowercase letters, numbers, and underscores only.
+          </p>
+        )}
 
         {error && (
           <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">

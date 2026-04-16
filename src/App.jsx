@@ -25,7 +25,7 @@ function App() {
             <h1 className="text-lg font-bold leading-tight sm:text-2xl">2-Player Game Platform</h1>
             {user && (
               <p className="mt-1 truncate text-sm text-gray-400">
-                Signed in as {profile?.username || user.email}
+                Signed in as {profile?.username || 'player'}
               </p>
             )}
           </div>
