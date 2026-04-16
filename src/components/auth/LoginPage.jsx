@@ -37,13 +37,17 @@ export default function LoginPage() {
 
     try {
       if (isRegister) {
-        await signUp({
+        const signUpResult = await signUp({
           email: form.email.trim(),
           username: form.username,
           password: form.password
         });
 
-        setSuccess('Account created. You can now start playing.');
+        if (signUpResult.session) {
+          setSuccess('Account created. You are now logged in.');
+        } else {
+          setSuccess('Account created. Check your email and verify your account before logging in.');
+        }
       } else {
         await signIn({
           email: form.email.trim(),

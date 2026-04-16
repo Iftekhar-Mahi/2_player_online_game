@@ -23,6 +23,10 @@ const mapAuthError = (error, normalizedUsername) => {
     return new Error('Invalid email or password.');
   }
 
+  if (message.includes('email not confirmed')) {
+    return new Error('Please verify your email before logging in.');
+  }
+
   return error;
 };
 
@@ -181,7 +185,7 @@ export function AuthProvider({ children }) {
 
     if (error) {
       setLoading(false);
-      throw error;
+      throw mapAuthError(error, '');
     }
 
     setUser(data.user);
