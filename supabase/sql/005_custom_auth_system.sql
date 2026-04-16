@@ -1,4 +1,4 @@
-create extension if not exists "pgcrypto";
+create extension if not exists "pgcrypto" with schema extensions;
 
 drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists public.handle_new_user();
@@ -76,7 +76,7 @@ create or replace function public.app_register(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   normalized_email text := lower(trim(p_email));
@@ -107,7 +107,11 @@ begin
   end if;
 
   insert into public.profiles (email, username, password_hash)
-  values (normalized_email, normalized_username, crypt(p_password, gen_salt('bf')));
+  values (
+    normalized_email,
+    normalized_username,
+    extensions.crypt(p_password, extensions.gen_salt('bf'))
+  );
 end;
 $$;
 
@@ -123,7 +127,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   target_user public.profiles%rowtype;
@@ -139,12 +143,12 @@ begin
     raise exception 'Invalid email or password.';
   end if;
 
-  if crypt(p_password, target_user.password_hash) <> target_user.password_hash then
+  if extensions.crypt(p_password, target_user.password_hash) <> target_user.password_hash then
     raise exception 'Invalid email or password.';
   end if;
 
-  raw_token := encode(gen_random_bytes(32), 'hex');
-  hashed_token := encode(digest(raw_token, 'sha256'), 'hex');
+  raw_token := encode(extensions.gen_random_bytes(32), 'hex');
+  hashed_token := encode(extensions.digest(raw_token, 'sha256'), 'hex');
 
   insert into public.app_sessions (user_id, token_hash, expires_at)
   values (target_user.id, hashed_token, now() + interval '30 days');
@@ -168,10 +172,10 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
-  hashed_token text := encode(digest(p_token, 'sha256'), 'hex');
+  hashed_token text := encode(extensions.digest(p_token, 'sha256'), 'hex');
 begin
   update public.app_sessions
   set last_seen_at = now()
@@ -196,11 +200,11 @@ create or replace function public.app_logout(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   delete from public.app_sessions
-  where token_hash = encode(digest(p_token, 'sha256'), 'hex');
+  where token_hash = encode(extensions.digest(p_token, 'sha256'), 'hex');
 end;
 $$;
 

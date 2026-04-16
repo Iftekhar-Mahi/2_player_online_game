@@ -1,11 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
+
+const TERMINAL_STATUSES = new Set(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED']);
 
 export function useRealtimeGame(roomId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [roomChannelStatus, setRoomChannelStatus] = useState('INIT');
+  const [stateChannelStatus, setStateChannelStatus] = useState('INIT');
+  const [lastEventAt, setLastEventAt] = useState(null);
+
   const { setRoom, setGameState } = useGameStore();
+
+  const debugLabel = useMemo(() => `realtime(room:${roomId || 'none'})`, [roomId]);
+
+  const fetchInFlightRef = useRef(false);
+  const pollTimerRef = useRef(null);
+
+  // Refs used inside timers/callbacks to avoid stale closure issues.
+  const roomStatusRef = useRef('INIT');
+  const stateStatusRef = useRef('INIT');
 
   useEffect(() => {
     if (!roomId) return;
@@ -14,7 +29,31 @@ export function useRealtimeGame(roomId) {
     let stateSub;
     let isMounted = true;
 
+    const stopPolling = () => {
+      if (pollTimerRef.current) {
+        window.clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+
+    const maybeStopPolling = () => {
+      if (roomStatusRef.current === 'SUBSCRIBED' && stateStatusRef.current === 'SUBSCRIBED') {
+        stopPolling();
+      }
+    };
+
+    const startPolling = () => {
+      if (pollTimerRef.current) return;
+      pollTimerRef.current = window.setInterval(() => {
+        fetchSnapshot();
+      }, 2000);
+      console.warn(`${debugLabel}: falling back to polling (2s) because realtime is not subscribed.`);
+    };
+
     const fetchSnapshot = async () => {
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
+
       try {
         const { data: roomData, error: roomError } = await supabase
           .from('game_rooms')
@@ -40,14 +79,17 @@ export function useRealtimeGame(roomId) {
         } else if (roomData.host_id) {
           const { data: newState, error: insertErr } = await supabase
             .from('game_states')
-            .insert([{
-              room_id: roomId,
-              current_board: [],
-              current_turn: roomData.host_id
-            }])
+            .insert([
+              {
+                room_id: roomId,
+                current_board: [],
+                current_turn: roomData.host_id
+              }
+            ])
             .select()
             .single();
 
+          // Unique constraint race (someone else inserted first)
           if (insertErr && insertErr.code !== '23505') throw insertErr;
 
           if (newState && isMounted) {
@@ -60,59 +102,119 @@ export function useRealtimeGame(roomId) {
         }
       } catch (err) {
         if (isMounted) {
-          setError(err.message);
+          setError(err?.message || String(err));
         }
       } finally {
+        fetchInFlightRef.current = false;
         if (isMounted) {
           setLoading(false);
         }
       }
     };
 
-    // Subscribe to room changes (e.g. guest joining)
-    roomSub = supabase.channel(`room_changes_${roomId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'game_rooms',
-        filter: `id=eq.${roomId}`
-      }, async (payload) => {
-        if (payload.new && Object.keys(payload.new).length > 0) {
-          setRoom(payload.new);
-        }
-        await fetchSnapshot();
-      }).subscribe((status) => {
+    const onRoomChange = async (payload) => {
+      setLastEventAt(new Date().toISOString());
+      if (payload?.new && Object.keys(payload.new).length > 0) {
+        setRoom(payload.new);
+      }
+      await fetchSnapshot();
+    };
+
+    const onStateChange = async (payload) => {
+      setLastEventAt(new Date().toISOString());
+      if (payload?.new && Object.keys(payload.new).length > 0) {
+        setGameState(payload.new);
+      }
+      await fetchSnapshot();
+    };
+
+    roomSub = supabase
+      .channel(`room_changes_${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'game_rooms',
+          filter: `id=eq.${roomId}`
+        },
+        onRoomChange
+      )
+      .subscribe((status) => {
+        if (!isMounted) return;
+        roomStatusRef.current = status;
+        setRoomChannelStatus(status);
+        console.log(`${debugLabel}: room channel -> ${status}`);
+
         if (status === 'SUBSCRIBED') {
+          maybeStopPolling();
           fetchSnapshot();
+        } else if (TERMINAL_STATUSES.has(status)) {
+          startPolling();
         }
       });
 
-    // Subscribe to game state changes (moves, wins, turns)
-    stateSub = supabase.channel(`state_changes_${roomId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'game_states',
-        filter: `room_id=eq.${roomId}`
-      }, async (payload) => {
-        if (payload.new && Object.keys(payload.new).length > 0) {
-          setGameState(payload.new);
-        }
-        await fetchSnapshot();
-      }).subscribe((status) => {
+    stateSub = supabase
+      .channel(`state_changes_${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'game_states',
+          filter: `room_id=eq.${roomId}`
+        },
+        onStateChange
+      )
+      .subscribe((status) => {
+        if (!isMounted) return;
+        stateStatusRef.current = status;
+        setStateChannelStatus(status);
+        console.log(`${debugLabel}: state channel -> ${status}`);
+
         if (status === 'SUBSCRIBED') {
+          maybeStopPolling();
           fetchSnapshot();
+        } else if (TERMINAL_STATUSES.has(status)) {
+          startPolling();
         }
       });
 
+    // Initial snapshot, and also refresh when tab becomes active (mobile browsers suspend websockets).
     fetchSnapshot();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchSnapshot();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // If we never manage to subscribe within ~8s, start polling.
+    const subscribeGuard = window.setTimeout(() => {
+      if (!isMounted) return;
+      if (roomStatusRef.current !== 'SUBSCRIBED' || stateStatusRef.current !== 'SUBSCRIBED') {
+        startPolling();
+      }
+    }, 8000);
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(roomSub);
-      supabase.removeChannel(stateSub);
+      window.clearTimeout(subscribeGuard);
+      document.removeEventListener('visibilitychange', onVisibility);
+      stopPolling();
+
+      if (roomSub) supabase.removeChannel(roomSub);
+      if (stateSub) supabase.removeChannel(stateSub);
     };
+    // Intentionally exclude channel status setters from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, setRoom, setGameState]);
 
-  return { loading, error };
+  return {
+    loading,
+    error,
+    roomChannelStatus,
+    stateChannelStatus,
+    lastEventAt
+  };
 }
