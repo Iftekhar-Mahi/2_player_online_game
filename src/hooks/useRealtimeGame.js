@@ -12,8 +12,9 @@ export function useRealtimeGame(roomId) {
 
     let roomSub;
     let stateSub;
+    let isMounted = true;
 
-    const fetchInitialData = async () => {
+    const fetchSnapshot = async () => {
       try {
         const { data: roomData, error: roomError } = await supabase
           .from('game_rooms')
@@ -22,86 +23,92 @@ export function useRealtimeGame(roomId) {
           .single();
 
         if (roomError) throw roomError;
+        if (!isMounted) return;
         setRoom(roomData);
 
         const { data: stateData, error: stateError } = await supabase
           .from('game_states')
           .select('*')
-          .eq('room_id', roomId);
+          .eq('room_id', roomId)
+          .maybeSingle();
 
         if (stateError) throw stateError;
 
-        // Create game state record if missing (on host creation)
-        if (stateData.length === 0 && roomData.host_id) {
-          // Additional safety check to prevent duplicated attempts in StrictMode
-          const { data: verifyData } = await supabase
+        if (stateData) {
+          if (!isMounted) return;
+          setGameState(stateData);
+        } else if (roomData.host_id) {
+          const { data: newState, error: insertErr } = await supabase
             .from('game_states')
-            .select('id')
-            .eq('room_id', roomId)
+            .insert([{
+              room_id: roomId,
+              current_board: [],
+              current_turn: roomData.host_id
+            }])
+            .select()
             .single();
 
-          if (!verifyData) {
-            const { data: newState, error: insertErr } = await supabase
-              .from('game_states')
-              .insert([{
-                room_id: roomId,
-                current_board: [], 
-                current_turn: roomData.host_id
-              }])
-              .select()
-              .single();
+          if (insertErr && insertErr.code !== '23505') throw insertErr;
 
-            if (insertErr && insertErr.code !== '23505') throw insertErr; // ignore duplicate key constraint safely
-            
-            if (newState) {
-              setGameState(newState);
-            }
+          if (newState && isMounted) {
+            setGameState(newState);
           }
-        } else if (stateData.length > 0) {
-          setGameState(stateData[0]);
+        }
+
+        if (isMounted) {
+          setError(null);
         }
       } catch (err) {
-        setError(err.message);
+        if (isMounted) {
+          setError(err.message);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
-
-    fetchInitialData();
 
     // Subscribe to room changes (e.g. guest joining)
     roomSub = supabase.channel(`room_changes_${roomId}`)
       .on('postgres_changes', {
-        event: '*', // Listen to all events just in case
+        event: '*',
         schema: 'public',
         table: 'game_rooms',
         filter: `id=eq.${roomId}`
-      }, (payload) => {
-        console.log('Room changed!', payload);
+      }, async (payload) => {
         if (payload.new && Object.keys(payload.new).length > 0) {
           setRoom(payload.new);
         }
+        await fetchSnapshot();
       }).subscribe((status) => {
-        console.log(`Room Channel status:`, status);
+        if (status === 'SUBSCRIBED') {
+          fetchSnapshot();
+        }
       });
 
     // Subscribe to game state changes (moves, wins, turns)
     stateSub = supabase.channel(`state_changes_${roomId}`)
       .on('postgres_changes', {
-        event: '*', // Listen to all events 
+        event: '*',
         schema: 'public',
         table: 'game_states',
         filter: `room_id=eq.${roomId}`
-      }, (payload) => {
-        console.log('Game state changed!', payload);
+      }, async (payload) => {
         if (payload.new && Object.keys(payload.new).length > 0) {
           setGameState(payload.new);
         }
+        await fetchSnapshot();
       }).subscribe((status) => {
-        console.log(`State Channel status:`, status);
+        if (status === 'SUBSCRIBED') {
+          fetchSnapshot();
+        }
       });
 
+    fetchSnapshot();
+
     return () => {
+      isMounted = false;
       supabase.removeChannel(roomSub);
       supabase.removeChannel(stateSub);
     };

@@ -21,8 +21,22 @@ export default function GameLobby() {
         .insert([{ code, host_id: user.id }])
         .select()
         .single();
-        
+      
       if (error) throw error;
+
+      const { error: stateError } = await supabase
+        .from('game_states')
+        .insert([{
+          room_id: data.id,
+          current_board: [],
+          current_turn: user.id,
+          winner_id: null,
+          move_history: []
+        }]);
+
+      if (stateError && stateError.code !== '23505') {
+        throw stateError;
+      }
       
       navigate(`/room/${data.id}`);
     } catch (err) {

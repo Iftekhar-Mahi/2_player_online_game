@@ -63,13 +63,16 @@ export default function Drop4Game() {
 
     let nextTurn = null;
     let winnerId = null;
+    let roomStatus = room.status;
 
     if (winCells) {
       winnerId = user.id;
       nextTurn = null;
+      roomStatus = 'finished';
     } else if (draw) {
-      winnerId = 'draw';
+      winnerId = null;
       nextTurn = null;
+      roomStatus = 'finished';
     } else {
       nextTurn = Object.values([room.host_id, room.guest_id]).find(id => id !== user.id);
     }
@@ -90,9 +93,19 @@ export default function Drop4Game() {
           winner_id: winnerId,
           updated_at: new Date().toISOString()
         })
-        .eq('room_id', room.id);
+        .eq('room_id', room.id)
+        .eq('current_turn', user.id);
 
       if (updateErr) throw updateErr;
+
+      if (roomStatus !== room.status) {
+        const { error: roomUpdateErr } = await supabase
+          .from('game_rooms')
+          .update({ status: roomStatus })
+          .eq('id', room.id);
+
+        if (roomUpdateErr) throw roomUpdateErr;
+      }
     } catch (err) {
       console.error('Error updating game state:', err.message);
       alert('Error making move: ' + err.message);
@@ -100,14 +113,30 @@ export default function Drop4Game() {
   };
 
   const handleRematch = async () => {
-    await supabase
+    const { error: stateResetErr } = await supabase
       .from('game_states')
       .update({
         current_board: [],
         current_turn: room.host_id,
         winner_id: null,
+        move_history: [],
+        updated_at: new Date().toISOString()
       })
       .eq('room_id', room.id);
+
+    if (stateResetErr) {
+      alert('Error starting rematch: ' + stateResetErr.message);
+      return;
+    }
+
+    const { error: roomResetErr } = await supabase
+      .from('game_rooms')
+      .update({ status: 'active' })
+      .eq('id', room.id);
+
+    if (roomResetErr) {
+      alert('Error syncing rematch: ' + roomResetErr.message);
+    }
   };
 
   return (
@@ -123,12 +152,12 @@ export default function Drop4Game() {
         {/* Center Status */}
         <div className="text-center flex-grow">
           <div className="text-3xl font-extrabold tracking-wide mb-1">
-            {gameState.winner_id 
-              ? (gameState.winner_id === 'draw' ? 'DRAW!' : (gameState.winner_id === user.id ? 'YOU WIN!' : 'OPPONENT WINS!')) 
+            {gameState.winner_id || gameState.current_turn === null
+              ? (!gameState.winner_id ? 'DRAW!' : (gameState.winner_id === user.id ? 'YOU WIN!' : 'OPPONENT WINS!'))
               : (isMyTurn ? <span className="text-green-400 animate-pulse">Your Turn</span> : <span className="text-gray-400">Opponent's Turn</span>)
             }
           </div>
-          {gameState.winner_id && (
+          {(gameState.winner_id || gameState.current_turn === null) && (
             <button 
               onClick={handleRematch}
               className="mt-2 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg transition-transform active:scale-95"
@@ -169,10 +198,10 @@ export default function Drop4Game() {
                     onClick={() => handleColumnClick(colIndex)}
                     className={`
                       relative w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden 
-                      ${isMyTurn && isValidMove(board, colIndex) && !cell ? 'cursor-pointer' : 'cursor-default'} 
+                      ${isMyTurn && isValidMove(board, colIndex) ? 'cursor-pointer' : 'cursor-default'} 
                       outline-none focus:outline-none
                     `}
-                    disabled={cell !== null || !isMyTurn || !!gameState.winner_id}
+                    disabled={!isValidMove(board, colIndex) || !isMyTurn || gameState.current_turn === null}
                     aria-label={`Drop token in column ${colIndex + 1}`}
                   >
                     {/* Shadow cutout for empty slot */}
