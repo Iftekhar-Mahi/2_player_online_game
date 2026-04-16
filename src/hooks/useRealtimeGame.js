@@ -44,9 +44,14 @@ export function useRealtimeGame(roomId) {
 
     const startPolling = () => {
       if (pollTimerRef.current) return;
+
+      // Fetch immediately so the UI updates without waiting for the first interval tick.
+      fetchSnapshot();
+
       pollTimerRef.current = window.setInterval(() => {
         fetchSnapshot();
       }, 2000);
+
       console.warn(`${debugLabel}: falling back to polling (2s) because realtime is not subscribed.`);
     };
 
