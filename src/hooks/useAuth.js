@@ -2,13 +2,10 @@ import { createContext, createElement, useContext, useEffect, useState } from 'r
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
-const USERNAME_EMAIL_DOMAIN = 'players.local';
 
 const normalizeUsername = (value) => value.trim().toLowerCase();
 
 const isValidUsername = (value) => /^[a-z0-9_]{3,24}$/.test(value);
-
-const usernameToAuthEmail = (username) => `${username}@${USERNAME_EMAIL_DOMAIN}`;
 
 const mapAuthError = (error, normalizedUsername) => {
   const message = error?.message?.toLowerCase() ?? '';
@@ -23,7 +20,7 @@ const mapAuthError = (error, normalizedUsername) => {
   }
 
   if (message.includes('invalid login credentials')) {
-    return new Error('Invalid username or password.');
+    return new Error('Invalid email or password.');
   }
 
   return error;
@@ -136,7 +133,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const signUp = async ({ username, password }) => {
+  const signUp = async ({ email, username, password }) => {
     setLoading(true);
     const normalizedUsername = normalizeUsername(username);
 
@@ -144,8 +141,6 @@ export function AuthProvider({ children }) {
       setLoading(false);
       throw new Error('Username must be 3-24 characters and use only letters, numbers, or underscores.');
     }
-
-    const email = usernameToAuthEmail(normalizedUsername);
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -176,16 +171,8 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signIn = async ({ username, password }) => {
+  const signIn = async ({ email, password }) => {
     setLoading(true);
-    const normalizedUsername = normalizeUsername(username);
-
-    if (!isValidUsername(normalizedUsername)) {
-      setLoading(false);
-      throw new Error('Enter the username you registered with.');
-    }
-
-    const email = usernameToAuthEmail(normalizedUsername);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -194,7 +181,7 @@ export function AuthProvider({ children }) {
 
     if (error) {
       setLoading(false);
-      throw mapAuthError(error, normalizedUsername);
+      throw error;
     }
 
     setUser(data.user);

@@ -7,6 +7,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     username: '',
+    email: '',
     password: ''
   });
   const [error, setError] = useState('');
@@ -37,6 +38,7 @@ export default function LoginPage() {
     try {
       if (isRegister) {
         await signUp({
+          email: form.email.trim(),
           username: form.username,
           password: form.password
         });
@@ -44,7 +46,7 @@ export default function LoginPage() {
         setSuccess('Account created. You can now start playing.');
       } else {
         await signIn({
-          username: form.username,
+          email: form.email.trim(),
           password: form.password
         });
       }
@@ -60,8 +62,8 @@ export default function LoginPage() {
       </h2>
       <p className="mx-auto mb-6 max-w-sm text-center text-sm text-gray-400 sm:text-base">
         {isRegister
-          ? 'Pick a unique username and password so players can log in from any device.'
-          : 'Log in with your username and password to rejoin your games.'}
+          ? 'Register with email, username, and password so players can log in from any device.'
+          : 'Log in with your email and password to rejoin your games.'}
       </p>
 
       <div className="mb-6 grid grid-cols-2 rounded-2xl bg-gray-900 p-1">
@@ -90,21 +92,38 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {isRegister && (
+          <label className="text-left">
+            <span className="mb-2 block text-sm font-medium text-gray-300">Username</span>
+            <input
+              type="text"
+              value={form.username}
+              onChange={(event) => updateField('username', normalizeUsername(event.target.value))}
+              className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
+              required={isRegister}
+              minLength={3}
+              maxLength={24}
+              pattern="[a-z0-9_]{3,24}"
+              placeholder="yourname"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
+            />
+          </label>
+        )}
+
         <label className="text-left">
-          <span className="mb-2 block text-sm font-medium text-gray-300">Username</span>
+          <span className="mb-2 block text-sm font-medium text-gray-300">Email</span>
           <input
-            type="text"
-            value={form.username}
-            onChange={(event) => updateField('username', normalizeUsername(event.target.value))}
+            type="email"
+            value={form.email}
+            onChange={(event) => updateField('email', event.target.value)}
             className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
             required
-            minLength={3}
-            maxLength={24}
-            pattern="[a-z0-9_]{3,24}"
-            placeholder="yourname"
+            placeholder="you@example.com"
             autoCapitalize="none"
             autoCorrect="off"
-            autoComplete="username"
+            autoComplete={isRegister ? 'email' : 'username'}
           />
         </label>
 
