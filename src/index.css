@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-board: #004d99;
+  --color-slot: #1a1a1a;
+  --color-p1: #ef4444; 
+  --color-p2: #eab308;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #111827;
+  color: #f3f4f6;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+@keyframes chipDrop {
+  0% {
+    transform: translateY(-400%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-chip-drop {
+  animation: chipDrop 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
