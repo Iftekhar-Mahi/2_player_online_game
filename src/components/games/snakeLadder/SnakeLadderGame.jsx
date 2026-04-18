@@ -6,6 +6,9 @@ import { useRealtimeGame } from '../../../hooks/useRealtimeGame';
 import { useGameStore } from '../../../store/gameStore';
 import { computeMove, getBoardRows, getSnakeLadderPairs, numberToGridPos, rollDie } from './snakeLadderLogic';
 
+const BOARD_ROWS = getBoardRows();
+const SNAKE_LADDER_PAIRS = getSnakeLadderPairs();
+
 const isPlainObject = (value) => {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 };
@@ -140,8 +143,8 @@ export default function SnakeLadderGame() {
   const lastMove = isPlainObject(board) ? board.last_move : null;
   const lastVia = isPlainObject(lastMove) ? lastMove.via : null;
 
-  const boardRows = useMemo(() => getBoardRows(), []);
-  const snakeLadderPairs = useMemo(() => getSnakeLadderPairs(), []);
+  const boardRows = BOARD_ROWS;
+  const snakeLadderPairs = SNAKE_LADDER_PAIRS;
 
   const getPlayersOnCell = (cell) => {
     const onCell = [];
