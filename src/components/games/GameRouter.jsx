@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useGameStore } from '../../store/gameStore';
 import { supabase } from '../../lib/supabase';
 import Drop4Game from './drop4/Drop4Game';
+import SnakeLadderGame from './snakeLadder/SnakeLadderGame';
 
 export default function GameRouter() {
   const { roomId } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [gameType, setGameType] = useState(null);
 
   useEffect(() => {
     const fetchRoomType = async () => {
@@ -19,6 +20,7 @@ export default function GameRouter() {
           .single();
 
         if (roomError) throw roomError;
+        setGameType(roomData?.game_type || 'drop4');
         
       } catch (err) {
         setError(err.message);
@@ -33,6 +35,6 @@ export default function GameRouter() {
   if (loading) return <div className="text-xl">Locating room...</div>;
   if (error) return <div className="text-xl text-red-500">Error: {error}</div>;
 
-  // We are strictly doing Drop4 according to architecture, but this could be a switch statement or object dictionary later.
+  if (gameType === 'snake_ladder') return <SnakeLadderGame />;
   return <Drop4Game />;
 }

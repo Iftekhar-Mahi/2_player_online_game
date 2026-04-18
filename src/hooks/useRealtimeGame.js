@@ -4,6 +4,24 @@ import { useGameStore } from '../store/gameStore';
 
 const TERMINAL_STATUSES = new Set(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED']);
 
+const getInitialBoardForGame = (gameType, hostId, guestId = null) => {
+  if (gameType === 'snake_ladder') {
+    const positions = {};
+    if (hostId) positions[hostId] = 0;
+    if (guestId) positions[guestId] = 0;
+
+    return {
+      positions,
+      last_roll: null,
+      last_mover: null,
+      last_move: null,
+      started_at: new Date().toISOString()
+    };
+  }
+
+  return [];
+};
+
 export function useRealtimeGame(roomId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -87,7 +105,7 @@ export function useRealtimeGame(roomId) {
             .insert([
               {
                 room_id: roomId,
-                current_board: [],
+                current_board: getInitialBoardForGame(roomData.game_type, roomData.host_id, roomData.guest_id),
                 current_turn: roomData.host_id
               }
             ])

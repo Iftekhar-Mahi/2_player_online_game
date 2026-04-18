@@ -9,7 +9,26 @@ export default function GameLobby() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const createRoom = async () => {
+  const getInitialBoardForGame = (gameType, hostId, guestId = null) => {
+    if (gameType === 'snake_ladder') {
+      const positions = {};
+      if (hostId) positions[hostId] = 0;
+      if (guestId) positions[guestId] = 0;
+
+      return {
+        positions,
+        last_roll: null,
+        last_mover: null,
+        last_move: null,
+        started_at: new Date().toISOString()
+      };
+    }
+
+    // drop4
+    return [];
+  };
+
+  const createRoom = async (gameType) => {
     setLoading(true);
     // Simple 6 char code
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -18,7 +37,7 @@ export default function GameLobby() {
       // Create room in supabase
       const { data, error } = await supabase
         .from('game_rooms')
-        .insert([{ code, host_id: user.id }])
+        .insert([{ code, host_id: user.id, game_type: gameType }])
         .select()
         .single();
       
@@ -28,7 +47,7 @@ export default function GameLobby() {
         .from('game_states')
         .insert([{
           room_id: data.id,
-          current_board: [],
+          current_board: getInitialBoardForGame(gameType, user.id),
           current_turn: user.id,
           winner_id: null,
           move_history: []
@@ -47,6 +66,48 @@ export default function GameLobby() {
     }
   };
 
+  const ensureSnakeLadderGuestInitialized = async ({ roomId, hostId, guestId }) => {
+    if (!roomId || !hostId || !guestId) return;
+
+    const { data: stateData, error: stateErr } = await supabase
+      .from('game_states')
+      .select('current_board')
+      .eq('room_id', roomId)
+      .maybeSingle();
+
+    if (stateErr) throw stateErr;
+    if (!stateData) return;
+
+    const board = stateData.current_board;
+    const positions = board && typeof board === 'object' && !Array.isArray(board) && board.positions && typeof board.positions === 'object'
+      ? board.positions
+      : {};
+
+    const hasHost = Object.prototype.hasOwnProperty.call(positions, hostId);
+    const hasGuest = Object.prototype.hasOwnProperty.call(positions, guestId);
+
+    if (hasHost && hasGuest) return;
+
+    const nextBoard = {
+      ...(board && typeof board === 'object' && !Array.isArray(board) ? board : {}),
+      positions: {
+        ...positions,
+        [hostId]: hasHost ? positions[hostId] : 0,
+        [guestId]: hasGuest ? positions[guestId] : 0
+      }
+    };
+
+    const { error: updateErr } = await supabase
+      .from('game_states')
+      .update({
+        current_board: nextBoard,
+        updated_at: new Date().toISOString()
+      })
+      .eq('room_id', roomId);
+
+    if (updateErr) throw updateErr;
+  };
+
   const joinRoom = async (e) => {
     e.preventDefault();
     if (!joinCode) return;
@@ -55,7 +116,7 @@ export default function GameLobby() {
     try {
       const { data, error } = await supabase
         .from('game_rooms')
-        .select('id, guest_id, host_id')
+        .select('id, guest_id, host_id, game_type')
         .eq('code', joinCode.toUpperCase())
         .single();
         
@@ -72,6 +133,14 @@ export default function GameLobby() {
           .eq('id', data.id);
           
         if (updateErr) throw updateErr;
+
+        if (data.game_type === 'snake_ladder') {
+          await ensureSnakeLadderGuestInitialized({
+            roomId: data.id,
+            hostId: data.host_id,
+            guestId: user.id
+          });
+        }
       }
 
       navigate(`/room/${data.id}`);
@@ -89,13 +158,20 @@ export default function GameLobby() {
       <p className="mb-6 text-sm text-gray-400 sm:hidden">Create a room or enter a code to join from your phone.</p>
       
       <div className="space-y-6">
-        <div>
+        <div className="space-y-3">
           <button 
-            onClick={createRoom}
+            onClick={() => createRoom('drop4')}
             disabled={loading}
             className="w-full rounded-xl bg-blue-600 py-3.5 text-lg font-bold transition hover:bg-blue-500 disabled:opacity-50 sm:py-4 sm:text-xl"
           >
-            Create New Game
+            Connect 4
+          </button>
+          <button 
+            onClick={() => createRoom('snake_ladder')}
+            disabled={loading}
+            className="w-full rounded-xl bg-gray-700 py-3.5 text-lg font-bold transition hover:bg-gray-600 disabled:opacity-50 sm:py-4 sm:text-xl"
+          >
+            Snake &amp; Ladder
           </button>
         </div>
 
