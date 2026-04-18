@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import Drop4Game from './drop4/Drop4Game';
 import SnakeLadderGame from './snakeLadder/SnakeLadderGame';
+import CheckersGame from './checkers/CheckersGame';
 
 export default function GameRouter() {
   const { roomId } = useParams();
@@ -36,5 +37,6 @@ export default function GameRouter() {
   if (error) return <div className="text-xl text-red-500">Error: {error}</div>;
 
   if (gameType === 'snake_ladder') return <SnakeLadderGame />;
+  if (gameType === 'checkers') return <CheckersGame />;
   return <Drop4Game />;
 }

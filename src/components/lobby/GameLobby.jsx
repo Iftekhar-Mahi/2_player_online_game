@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { createInitialBoard as createInitialCheckersBoard } from '../games/checkers/checkersLogic';
 
 export default function GameLobby() {
   const [joinCode, setJoinCode] = useState('');
@@ -22,6 +23,10 @@ export default function GameLobby() {
         last_move: null,
         started_at: new Date().toISOString()
       };
+    }
+
+    if (gameType === 'checkers') {
+      return createInitialCheckersBoard();
     }
 
     // drop4
@@ -167,11 +172,11 @@ export default function GameLobby() {
             Connect 4
           </button>
           <button 
-            onClick={() => createRoom('snake_ladder')}
+            onClick={() => createRoom('checkers')}
             disabled={loading}
             className="w-full rounded-xl bg-gray-700 py-3.5 text-lg font-bold transition hover:bg-gray-600 disabled:opacity-50 sm:py-4 sm:text-xl"
           >
-            Snake &amp; Ladder
+            Checkers
           </button>
         </div>
 

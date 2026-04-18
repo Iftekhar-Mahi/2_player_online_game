@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
+import { createInitialBoard as createInitialCheckersBoard } from '../components/games/checkers/checkersLogic';
 
 const TERMINAL_STATUSES = new Set(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED']);
 
@@ -17,6 +18,10 @@ const getInitialBoardForGame = (gameType, hostId, guestId = null) => {
       last_move: null,
       started_at: new Date().toISOString()
     };
+  }
+
+  if (gameType === 'checkers') {
+    return createInitialCheckersBoard();
   }
 
   return [];
