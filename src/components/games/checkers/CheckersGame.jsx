@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
@@ -52,20 +52,20 @@ export default function CheckersGame() {
   const isFinished = Boolean(gameState.winner_id) || room.status === 'finished';
   const isMyTurn = gameState.current_turn === user.id && !gameState.winner_id;
 
-  const statusText = useMemo(() => {
+  const statusText = (() => {
     if (gameState.winner_id) {
       return gameState.winner_id === user.id ? 'YOU WIN!' : 'OPPONENT WINS!';
     }
     if (room.status === 'finished') return 'GAME OVER';
     return isMyTurn ? 'Your turn' : "Opponent's turn";
-  }, [gameState.winner_id, isMyTurn, room.status, user.id]);
+  })();
 
-  const legalMoves = useMemo(() => {
+  const legalMoves = (() => {
     if (!selected) return [];
     const { r, c } = selected;
     if (!inBounds(r, c)) return [];
     return getLegalMovesForPiece(board, r, c);
-  }, [board, selected]);
+  })();
 
   const isMyPiece = (piece) => {
     if (!piece) return false;
