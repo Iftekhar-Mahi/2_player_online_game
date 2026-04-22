@@ -70,11 +70,12 @@ export default function CheckersGame() {
   const moveHistory = Array.isArray(gameState.move_history) ? gameState.move_history : [];
 
   const opponentLastMove = (() => {
-    for (let i = moveHistory.length - 1; i >= 0; i--) {
-      const move = moveHistory[i];
-      if (move?.mover_id && move.mover_id !== user.id) return move;
-    }
-    return null;
+    // Highlight only while you haven't moved yet after the opponent.
+    // In other words: only highlight when the most recent move was made by the opponent.
+    const last = moveHistory[moveHistory.length - 1];
+    if (!last?.mover_id) return null;
+    if (last.mover_id === user.id) return null;
+    return last;
   })();
 
   const mustContinueFrom = (() => {
@@ -342,7 +343,7 @@ export default function CheckersGame() {
                     className={
                       `relative flex h-full w-full items-center justify-center border border-black/20 ${squareBg} ` +
                       `${selectedHere ? 'ring-2 ring-blue-400 ring-inset' : ''} ` +
-                      `${lastMoveHere ? 'ring-2 ring-yellow-400/80 ring-inset' : ''}`
+                      `${lastMoveHere ? 'ring-2 ring-teal-400 ring-inset' : ''}`
                     }
                     aria-label={`Square ${r}, ${c}`}
                   >
