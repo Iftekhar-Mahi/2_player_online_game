@@ -105,9 +105,33 @@ export const getCaptureMoves = (board, fromR, fromC) => {
   return moves;
 };
 
-export const getLegalMovesForPiece = (board, fromR, fromC) => {
-  // We allow captures and simple moves (no forced capture for now).
-  return [...getCaptureMoves(board, fromR, fromC), ...getSimpleMoves(board, fromR, fromC)];
+export const getAllPiecesForSide = (board, side) => {
+  const pieces = [];
+  for (let r = 0; r < CHECKERS_SIZE; r++) {
+    for (let c = 0; c < CHECKERS_SIZE; c++) {
+      const piece = board?.[r]?.[c] ?? null;
+      if (!piece) continue;
+      if (getPieceOwner(piece) === side) pieces.push({ r, c, piece });
+    }
+  }
+  return pieces;
+};
+
+export const sideHasAnyCapture = (board, side) => {
+  for (const { r, c } of getAllPiecesForSide(board, side)) {
+    if (getCaptureMoves(board, r, c).length > 0) return true;
+  }
+  return false;
+};
+
+export const getLegalMovesForPiece = (board, fromR, fromC, options = {}) => {
+  // Standard checkers: if any capture exists for the player, only captures are allowed.
+  // `options.captureOnly` forces capture moves for this specific piece.
+  const { captureOnly = false } = options;
+
+  const captures = getCaptureMoves(board, fromR, fromC);
+  if (captureOnly) return captures;
+  return [...captures, ...getSimpleMoves(board, fromR, fromC)];
 };
 
 export const applyMove = (board, fromR, fromC, toR, toC) => {

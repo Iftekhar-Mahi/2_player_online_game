@@ -8,12 +8,13 @@ import {
   CHECKERS_SIZE,
   applyMove,
   createInitialBoard,
+  getCaptureMoves,
   getLegalMovesForPiece,
   getPieceOwner,
   getWinnerByElimination,
   inBounds,
-  isHostPiece,
-  isKing
+  isKing,
+  sideHasAnyCapture
 } from './checkersLogic';
 
 const isBoard = (value) => Array.isArray(value) && value.length === CHECKERS_SIZE;
@@ -28,6 +29,12 @@ export default function CheckersGame() {
 
   const isHost = room?.host_id === user?.id;
   const mySide = isHost ? 'host' : 'guest';
+  const flipBoard = mySide === 'guest';
+
+  const toModelCoords = (viewR, viewC) => {
+    if (!flipBoard) return { r: viewR, c: viewC };
+    return { r: CHECKERS_SIZE - 1 - viewR, c: CHECKERS_SIZE - 1 - viewC };
+  };
 
   if (!user) return <div className="text-xl">Authenticating...</div>;
   if (loading) return <div className="text-xl">Loading room state...</div>;
@@ -60,10 +67,46 @@ export default function CheckersGame() {
     return isMyTurn ? 'Your turn' : "Opponent's turn";
   })();
 
+  const moveHistory = Array.isArray(gameState.move_history) ? gameState.move_history : [];
+
+  const opponentLastMove = (() => {
+    for (let i = moveHistory.length - 1; i >= 0; i--) {
+      const move = moveHistory[i];
+      if (move?.mover_id && move.mover_id !== user.id) return move;
+    }
+    return null;
+  })();
+
+  const mustContinueFrom = (() => {
+    if (!isMyTurn) return null;
+    const last = moveHistory[moveHistory.length - 1];
+    if (!last || last.mover_id !== user.id) return null;
+    if (!last.was_capture) return null;
+    if (last.kinged) return null;
+    if (!last?.to) return null;
+    const { r, c } = last.to;
+    const nextCaptures = getCaptureMoves(board, r, c);
+    if (nextCaptures.length === 0) return null;
+    return { r, c };
+  })();
+
+  const captureIsForced = isMyTurn && !mustContinueFrom && sideHasAnyCapture(board, mySide);
+
   const legalMoves = (() => {
     if (!selected) return [];
     const { r, c } = selected;
     if (!inBounds(r, c)) return [];
+
+    // If a multi-jump is in progress, only that piece may move and only by capturing.
+    if (mustContinueFrom) {
+      if (r !== mustContinueFrom.r || c !== mustContinueFrom.c) return [];
+      return getLegalMovesForPiece(board, r, c, { captureOnly: true });
+    }
+
+    if (captureIsForced) {
+      return getLegalMovesForPiece(board, r, c, { captureOnly: true });
+    }
+
     return getLegalMovesForPiece(board, r, c);
   })();
 
@@ -73,8 +116,10 @@ export default function CheckersGame() {
     return owner === mySide;
   };
 
-  const handleSquareClick = async (r, c) => {
+  const handleSquareClick = async (viewR, viewC) => {
     if (isFinished) return;
+
+    const { r, c } = toModelCoords(viewR, viewC);
 
     const piece = board[r][c];
 
@@ -82,6 +127,13 @@ export default function CheckersGame() {
     if (!selected) {
       if (!isMyTurn) return;
       if (!isMyPiece(piece)) return;
+
+      if (mustContinueFrom) {
+        // Only the forced piece may be selected mid-combo.
+        setSelected({ r: mustContinueFrom.r, c: mustContinueFrom.c });
+        return;
+      }
+
       setSelected({ r, c });
       return;
     }
@@ -91,12 +143,14 @@ export default function CheckersGame() {
 
     // Re-select
     if (fromR === r && fromC === c) {
+      if (mustContinueFrom) return;
       setSelected(null);
       return;
     }
 
-    // Switch selection to another of my pieces
+    // Switch selection to another of my pieces (unless a multi-jump is in progress)
     if (isMyTurn && isMyPiece(piece)) {
+      if (mustContinueFrom) return;
       setSelected({ r, c });
       return;
     }
@@ -107,7 +161,7 @@ export default function CheckersGame() {
     const allowed = legalMoves.find((m) => m.toR === r && m.toC === c);
     if (!allowed) return;
 
-    const { board: nextBoard } = applyMove(board, fromR, fromC, r, c);
+    const { board: nextBoard, capture, kinged } = applyMove(board, fromR, fromC, r, c);
 
     // Determine winner (simple elimination only for now)
     const eliminated = getWinnerByElimination(nextBoard);
@@ -117,25 +171,32 @@ export default function CheckersGame() {
           : (eliminated === 'host' ? room.host_id : room.guest_id))
       : null;
 
+    const nextCaptures = capture && !kinged ? getCaptureMoves(nextBoard, r, c) : [];
+    const continuesCombo = Boolean(capture) && !kinged && nextCaptures.length > 0;
+
     const nextTurn = winnerId
       ? null
-      : (user.id === room.host_id ? room.guest_id : room.host_id);
+      : (continuesCombo ? user.id : (user.id === room.host_id ? room.guest_id : room.host_id));
 
     const moveRecord = {
+      mover_id: user.id,
       from: { r: fromR, c: fromC },
       to: { r, c },
+      was_capture: Boolean(capture),
+      captured: capture ? [capture] : [],
+      kinged,
       at: new Date().toISOString()
     };
 
     const nextMoveHistory = Array.isArray(gameState.move_history)
       ? [...gameState.move_history, moveRecord]
-      : gameState.move_history;
+      : moveHistory.concat(moveRecord);
 
     let roomStatus = room.status;
     if (winnerId) roomStatus = 'finished';
 
     try {
-      setSelected(null);
+      setSelected(continuesCombo ? { r, c } : null);
       setGameState({
         ...gameState,
         current_board: nextBoard,
@@ -204,14 +265,22 @@ export default function CheckersGame() {
     setSelected(null);
   };
 
-  const isDestination = (r, c) => legalMoves.some((m) => m.toR === r && m.toC === c);
+  const isDestination = (modelR, modelC) => legalMoves.some((m) => m.toR === modelR && m.toC === modelC);
+
+  const isOpponentLastMoveSquare = (modelR, modelC) => {
+    if (!opponentLastMove) return false;
+    const from = opponentLastMove.from;
+    const to = opponentLastMove.to;
+    if (!from || !to) return false;
+    return (from.r === modelR && from.c === modelC) || (to.r === modelR && to.c === modelC);
+  };
 
   return (
     <div className="flex w-full max-w-5xl flex-col items-center gap-5 sm:gap-8">
       <div className="flex w-full max-w-3xl items-center justify-between gap-3 rounded-2xl border border-gray-700 bg-gray-800 p-4 shadow-xl sm:p-6">
         <div className={`flex min-w-0 flex-col items-center gap-2 transition-opacity ${isMyTurn ? 'opacity-100 scale-110' : 'opacity-60'}`}>
           <span className="text-xs font-bold text-gray-400 capitalize sm:text-sm">You</span>
-          <div className={`h-6 w-6 rounded-full shadow-lg sm:h-8 sm:w-8 ${isHost ? 'bg-red-500' : 'bg-gray-200'}`} />
+          <div className={`h-6 w-6 rounded-full shadow-lg sm:h-8 sm:w-8 ${isHost ? 'bg-black' : 'bg-white'}`} />
         </div>
 
         <div className="min-w-0 flex-grow text-center">
@@ -228,49 +297,65 @@ export default function CheckersGame() {
 
         <div className={`flex min-w-0 flex-col items-center gap-2 transition-opacity ${!isMyTurn && !isFinished ? 'opacity-100 scale-110' : 'opacity-60'}`}>
           <span className="text-xs font-bold text-gray-400 capitalize sm:text-sm">Opponent</span>
-          <div className={`h-6 w-6 rounded-full shadow-lg sm:h-8 sm:w-8 ${isHost ? 'bg-gray-200' : 'bg-red-500'}`} />
+          <div className={`h-6 w-6 rounded-full shadow-lg sm:h-8 sm:w-8 ${isHost ? 'bg-white' : 'bg-black'}`} />
         </div>
       </div>
 
       <div className="w-full max-w-3xl">
         <div className="relative mx-auto aspect-square w-full overflow-hidden rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl">
-          <div className="grid h-full w-full grid-cols-8">
-            {board.map((row, r) =>
-              row.map((cell, c) => {
+          <div className="grid h-full w-full grid-cols-8 grid-rows-8">
+            {Array.from({ length: CHECKERS_SIZE }).map((_, viewR) =>
+              Array.from({ length: CHECKERS_SIZE }).map((__, viewC) => {
+                const { r, c } = toModelCoords(viewR, viewC);
+                const cell = board[r][c];
+
                 const dark = (r + c) % 2 === 1;
                 const selectedHere = selected && selected.r === r && selected.c === c;
                 const dest = isDestination(r, c);
+                const lastMoveHere = isOpponentLastMoveSquare(r, c);
 
-                const squareBg = dark ? 'bg-gray-900' : 'bg-gray-800';
+                const squareBg = dark ? 'bg-amber-900' : 'bg-stone-100';
 
                 const piece = cell;
                 const owner = getPieceOwner(piece);
                 const mine = owner === mySide;
 
-                const pieceColor = owner === 'host' ? 'bg-red-500' : owner === 'guest' ? 'bg-gray-200' : '';
+                const pieceStyle =
+                  owner === 'host'
+                    ? 'bg-black border border-white/20'
+                    : owner === 'guest'
+                      ? 'bg-white border border-black/20'
+                      : '';
+
+                const kingMarker = (() => {
+                  if (!piece || !isKing(piece)) return null;
+                  // Opposite-color dot to indicate king: black on white, white on black.
+                  const dot = owner === 'guest' ? 'bg-black' : 'bg-white';
+                  return <span className={`absolute h-3 w-3 rounded-full ${dot}`} />;
+                })();
 
                 return (
                   <button
-                    key={`${r}-${c}`}
+                    key={`${viewR}-${viewC}`}
                     type="button"
-                    onClick={() => handleSquareClick(r, c)}
-                    className={`relative flex items-center justify-center border border-gray-800 ${squareBg} ${selectedHere ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
+                    onClick={() => handleSquareClick(viewR, viewC)}
+                    className={
+                      `relative flex h-full w-full items-center justify-center border border-black/20 ${squareBg} ` +
+                      `${selectedHere ? 'ring-2 ring-blue-400 ring-inset' : ''} ` +
+                      `${lastMoveHere ? 'ring-2 ring-yellow-400/80 ring-inset' : ''}`
+                    }
                     aria-label={`Square ${r}, ${c}`}
                   >
-                    {dest && (
-                      <span className="absolute h-3 w-3 rounded-full bg-blue-400/70" />
-                    )}
+                    {dest && <span className="absolute h-3 w-3 rounded-full bg-blue-500/70" />}
 
                     {piece && (
                       <span
-                        className={`relative flex h-8 w-8 items-center justify-center rounded-full shadow-md sm:h-10 sm:w-10 ${pieceColor} ${mine && isMyTurn ? 'ring-2 ring-white/30' : ''}`}
+                        className={
+                          `relative flex h-8 w-8 items-center justify-center rounded-full shadow-md sm:h-10 sm:w-10 ${pieceStyle} ` +
+                          `${mine && isMyTurn ? 'ring-2 ring-white/20' : ''}`
+                        }
                       >
-                        {isKing(piece) && (
-                          <span className="text-xs font-black text-gray-900">K</span>
-                        )}
-                        {!isKing(piece) && isHostPiece(piece) && (
-                          <span className="sr-only">Host man</span>
-                        )}
+                        {kingMarker}
                       </span>
                     )}
                   </button>
